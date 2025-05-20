@@ -62,7 +62,7 @@ def dijkstra(edges, start, end):
         for neighbor, weight in edges.get(node, []):
             if neighbor not in visited:
                 heapq.heappush(heap, (cost + weight, neighbor, path))
-    return None
+    return -1, []
 
 
 def generate_edges_direct(roads):

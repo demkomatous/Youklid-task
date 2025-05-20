@@ -1,5 +1,5 @@
 def prepare_data(file: str) -> dict:
-    with open(f"input_files/{file}.in", "r") as f:
+    with open(f"input_files/{file}", "r") as f:
         # TODO: Add replace \r
         data = f.read().split("\n\n")
 
@@ -52,7 +52,7 @@ def define_workers(data: list[str]) -> list[dict]:
             }
         )
 
-    return workers
+    return sorted(workers, key=lambda x: x['start'])
 
 def define_cleanings(data: list[str]) -> list[dict]:
     cleanings = []
@@ -69,10 +69,14 @@ def define_cleanings(data: list[str]) -> list[dict]:
             }
         )
 
-    return cleanings
+    return sorted(cleanings, key=lambda x: x['start'])
 
 def show_data(data: dict, idx: str) -> None:
     print(idx.upper())
     for d in data[idx]:
         print(d)
     print("-" * 20)
+
+
+def get_record(data, idx_name, value):
+    return [i for i, entry in enumerate(data) if entry[idx_name] == value]
