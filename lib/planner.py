@@ -1,0 +1,87 @@
+import heapq
+
+
+def best_path(home_start: int, home_end: int, data: dict):
+    """
+    Finds the best path to visit homes
+    :param home_start: start home id
+    :param home_end: end home id
+    :param data: all given data
+    :return:
+    """
+    starting_nodes = []
+    exit_nodes = []
+
+    for dh in data["homes"]:
+        if dh["home"] == home_start:
+            starting_nodes.append(
+                {
+                    "node": dh["node"],
+                    "time": dh["walk_time"]
+                }
+            )
+        if dh["home"] == home_end:
+            exit_nodes.append(
+                {
+                    "node": dh["node"],
+                    "time": dh["walk_time"]
+                }
+            )
+
+    if len(starting_nodes) == 0 or len(exit_nodes) == 0:
+        raise Exception("Home has no node")
+
+    paths = []
+    for sn in starting_nodes:
+        for en in exit_nodes:
+            path = dijkstra(generate_edges_indirect(data["roads"]), sn["node"], en["node"])
+            paths.append(
+                {
+                    "path": path[1],
+                    "time": sn["time"] + path[0] + en["time"]
+                }
+            )
+
+    return sorted(paths, key=lambda x: x['time'])[0]
+
+
+def dijkstra(edges, start, end):
+    """
+    """
+    heap = [(0, start, [])]
+    visited = set()
+
+    while heap:
+        cost, node, path = heapq.heappop(heap)
+        if node in visited:
+            continue
+        path = path + [node]
+        if node == end:
+            return cost, path
+        visited.add(node)
+        for neighbor, weight in edges.get(node, []):
+            if neighbor not in visited:
+                heapq.heappush(heap, (cost + weight, neighbor, path))
+    return None
+
+
+def generate_edges_direct(roads):
+    edges = {}
+    for road in roads:
+        u, v = road['nodes']
+        duration = road['duration']
+        if u not in edges:
+            edges[u] = []
+        edges[u].append((v, duration))
+
+    return edges
+
+
+def generate_edges_indirect(roads):
+    edges = {}
+    for road in roads:
+        u, v = road['nodes']
+        duration = road['duration']
+        edges.setdefault(u, []).append((v, duration))
+        edges.setdefault(v, []).append((u, duration))
+    return edges
