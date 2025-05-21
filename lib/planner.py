@@ -85,3 +85,23 @@ def generate_edges_indirect(roads):
         edges.setdefault(u, []).append((v, duration))
         edges.setdefault(v, []).append((u, duration))
     return edges
+
+
+def can_do_it_someone_else(possibilities, worker, cleaning):
+    eligible_workers = []
+    for other_worker, cleanings in possibilities.items():
+        if other_worker == str(worker) or other_worker == worker:
+            continue
+        if cleaning in cleanings or str(cleaning) in cleanings:
+            eligible_workers.append(int(other_worker))
+    return eligible_workers
+
+
+def remove_from_all_except(possibilities, worker, cleaning):
+    for w_id in possibilities:
+        if str(w_id) == str(worker):
+            continue
+        if cleaning in possibilities[w_id]:
+            possibilities[w_id].remove(cleaning)
+
+    return possibilities

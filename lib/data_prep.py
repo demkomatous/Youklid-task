@@ -1,7 +1,10 @@
 def prepare_data(file: str) -> dict:
-    with open(f"input_files/{file}", "r") as f:
+    with (open(f"input_files/{file}", "r") as f):
         # TODO: Add replace \r
-        data = f.read().split("\n\n")
+
+        data = f.read()
+        data = data.replace("\r", "")
+        data = data.split("\n\n")
 
     return {
         "roads": define_roads(data[0].split("\n")),
@@ -14,6 +17,8 @@ def define_roads(data: list[str]) -> list:
     roads = []
     for road in data:
         road_list = road.split(" ")
+        if len(road_list) != 3:
+            continue
         roads.append(
             {
                 "nodes": [int(road_list[0]), int(road_list[1])],
@@ -28,6 +33,8 @@ def define_homes(data: list[str]) -> list[dict]:
     home_2_node = []
     for home in data:
         home_list = home.split(" ")
+        if len(home_list) != 3:
+            continue
         home_2_node.append(
             {
                 "home": int(home_list[0]),
@@ -42,6 +49,8 @@ def define_workers(data: list[str]) -> list[dict]:
     workers = []
     for worker in data:
         worker_list = worker.split(" ")
+        if len(worker_list) != 7:
+            continue
         workers.append(
             {
                 "worker": int(worker_list[0]),
@@ -58,6 +67,8 @@ def define_cleanings(data: list[str]) -> list[dict]:
     cleanings = []
     for cleaning in data:
         cleaning_list = cleaning.split(" ")
+        if len(cleaning_list) != 5:
+            continue
         cleanings.append(
             {
                 "cleaning": int(cleaning_list[0]),
