@@ -88,6 +88,13 @@ def generate_edges_indirect(roads):
 
 
 def can_do_it_someone_else(possibilities, worker, cleaning):
+    """
+    V1 - score on 02 = -95960.2
+    :param possibilities:
+    :param worker:
+    :param cleaning:
+    :return:
+    """
     eligible_workers = []
     for other_worker, cleanings in possibilities.items():
         if other_worker == str(worker) or other_worker == worker:
@@ -96,6 +103,24 @@ def can_do_it_someone_else(possibilities, worker, cleaning):
             eligible_workers.append(int(other_worker))
     return eligible_workers
 
+
+def _can_do_it_someone_else(possibilities, worker, cleaning):
+    """
+    V2 - score on 02 = -84700
+    :param possibilities:
+    :param worker:
+    :param cleaning:
+    :return:
+    """
+    eligible_workers = []
+    worker_id = int(worker)
+    for other_worker, cleanings in possibilities.items():
+        other_id = int(other_worker)
+        if other_id <= worker_id:
+            continue
+        if cleaning in cleanings:
+            eligible_workers.append(other_id)
+    return eligible_workers
 
 def remove_from_all_except(possibilities, worker, cleaning):
     for w_id in possibilities:

@@ -1,8 +1,8 @@
+import math
 import time
-from fileinput import filename
+from typing import overload
 
-from numpy.ma.core import append
-
+import penalties
 from lib import data_prep
 from lib import planner
 
@@ -26,17 +26,19 @@ for worker in data["workers"]:
     possible_cleanings[str(worker["worker"])] = []
     for cleaning in data["cleanings"]:
         # Nezačíná a končí úklid před/po pracovní době
-        if (
-                (worker["start"] * 0.9) <= cleaning["start"] and
-                (worker["end"] * 1.1) >= cleaning["end"] and
-                (worker["hours_per_day"] * 1.2) >= cleaning["duration"]
-        ):
+        if len(possible_cleanings[str(worker["worker"])]) > 0:
+            prev_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings[str(worker["worker"])][-1]))[0]]
+            current_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(cleaning["cleaning"]))[0]]
+            if prev_cleaning["end"] != current_cleaning["start"]:
+                possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+        else:
             possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
 
 print(possible_cleanings)
 possible_cleanings_unassigned = possible_cleanings.copy()
 
 assigned_cleanings = []
+overload_amount = 0
 for pc_key in possible_cleanings.keys():
     target_worker = data["workers"][data_prep.get_record(data["workers"], "worker", int(pc_key))[0]]
     target_worker_options = []
@@ -47,9 +49,10 @@ for pc_key in possible_cleanings.keys():
         if in_work + cleaning["duration"] > (target_worker["hours_per_day"] * 1.2):
             # can somebody else?
             # if so, drop
-            print("Worker is gonna be overloaded")
-            not_scheduled.append(cleaning_id)
-            continue
+            if planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id):
+                print("Worker is gonna be overloaded")
+                not_scheduled.append(cleaning_id)
+                continue
 
         if idx_clid == 0:
             origin = target_worker["home"]
@@ -66,11 +69,16 @@ for pc_key in possible_cleanings.keys():
             # Path does not exist
             continue
 
-        journey_end = path["time"] + (journey_start - 0.5)  # ETA
-        if journey_end > cleaning["start"]:
+        journey_end = path["time"] + journey_start  # ETA
+        time_reserve = cleaning["start"] - data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings_unassigned[pc_key][idx_clid - 1]))[0]]["end"]
+        total_points_earned = (math.floor(cleaning["duration"]) * penalties.HOUR_CLEANING + penalties.CLEANING_DONE)
+        time_over = path["time"] - time_reserve
+        netto_points = total_points_earned - (time_over * penalties.ARRIVE_LATE)
+        print("Netto points", netto_points)
+
+        if netto_points < 0 and not planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id):
+            print(f"Appending {cleaning_id} to not scheduled; netto points: {netto_points} < 0")
             # TODO: Count cumulative delay
-            print("Worker is not gonna make it to work")
-            print(f"travel time: {path['time']}")
             other_options = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, cleaning_id)
             # other_options_prev = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, int(possible_cleanings[pc_key][idx_clid - 1]))
             other_options_prev = []  # Implement later
