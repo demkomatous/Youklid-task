@@ -25,7 +25,6 @@ possible_cleanings = {}
 for worker in data["workers"]:
     possible_cleanings[str(worker["worker"])] = []
     for cleaning in data["cleanings"]:
-        # Nezačíná a končí úklid před/po pracovní době
         if len(possible_cleanings[str(worker["worker"])]) > 0:
             prev_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings[str(worker["worker"])][-1]))[0]]
             current_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(cleaning["cleaning"]))[0]]
@@ -43,16 +42,28 @@ for pc_key in possible_cleanings.keys():
     target_worker = data["workers"][data_prep.get_record(data["workers"], "worker", int(pc_key))[0]]
     target_worker_options = []
     in_work = 0
+    delay = 0
     for idx_clid, cleaning_id in enumerate(possible_cleanings[pc_key]):
         cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(cleaning_id))[0]]
 
-        if in_work + cleaning["duration"] > (target_worker["hours_per_day"] * 1.2):
-            # can somebody else?
-            # if so, drop
-            if planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id):
-                print("Worker is gonna be overloaded")
-                not_scheduled.append(cleaning_id)
-                continue
+        overload_penalty = 0
+        if in_work + cleaning["duration"] > target_worker['hours_per_day']:
+            print(f"Overload, in work {in_work}, target_duration: {target_worker['hours_per_day']} cleaning duration {cleaning['duration']}")
+            # Going overload
+            overload_penalty = cleaning["duration"] * penalties.OVERLOAD_PENALTY
+            print(overload_penalty)
+            print("/" * 5 )
+
+        out_of_ideal_penalty = 0
+        if cleaning["start"] > target_worker["end"] or cleaning["end"] < target_worker["start"]:
+            # The whole work is out of the window
+            out_of_ideal_penalty = cleaning["duration"] * penalties.OUT_OF_IDEAL
+        elif cleaning["start"] < target_worker["start"]:
+            # Start is before the window, end after
+            out_of_ideal_penalty = (target_worker["start"] - cleaning["start"]) * penalties.OUT_OF_IDEAL
+        elif cleaning["start"] < target_worker["end"]:
+            # End is after window, start in the window
+            out_of_ideal_penalty = (cleaning["end"] - target_worker["end"]) * penalties.OUT_OF_IDEAL
 
         if idx_clid == 0:
             origin = target_worker["home"]
@@ -69,14 +80,16 @@ for pc_key in possible_cleanings.keys():
             # Path does not exist
             continue
 
+        print("--- TIME PENALTY COUNT ---")
         journey_end = path["time"] + journey_start  # ETA
         time_reserve = cleaning["start"] - data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings_unassigned[pc_key][idx_clid - 1]))[0]]["end"]
         total_points_earned = (math.floor(cleaning["duration"]) * penalties.HOUR_CLEANING + penalties.CLEANING_DONE)
-        time_over = path["time"] - time_reserve
-        netto_points = total_points_earned - (time_over * penalties.ARRIVE_LATE)
-        print("Netto points", netto_points)
+        time_over = path["time"] + delay - time_reserve
+        travel_penalty = path["time"] * penalties.TRAVEL_PENALTY
+        netto_points = total_points_earned - (time_over * penalties.ARRIVE_LATE) - travel_penalty - overload_penalty - out_of_ideal_penalty
+        print("-" * 20)
 
-        if netto_points < 0 and not planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id):
+        if netto_points < 0 < len(planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id)):
             print(f"Appending {cleaning_id} to not scheduled; netto points: {netto_points} < 0")
             # TODO: Count cumulative delay
             other_options = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, cleaning_id)
@@ -89,6 +102,7 @@ for pc_key in possible_cleanings.keys():
             if len(other_options) > 0:
                 # Skip, try another worker ... if another worker is not available, unscheduled cleaning
                 not_scheduled.append(cleaning_id)
+                print(f"Appending {cleaning_id} to not scheduled")
                 continue
             else:
                 not_scheduled.append(cleaning_id)
@@ -96,6 +110,8 @@ for pc_key in possible_cleanings.keys():
                 continue
 
         in_work += cleaning["duration"]
+        delay += time_over
+        print("Netto points", netto_points)
         result.append([cleaning_id, int(pc_key)])
         print(f"Assigning {cleaning_id}")
         if cleaning_id in not_scheduled:
