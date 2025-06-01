@@ -1,10 +1,11 @@
 import math
 import time
-from typing import overload
 
 import penalties
+import evaluate
 from lib import data_prep
 from lib import planner
+from lib.planner import can_do_it_someone_else
 
 """
 Předpokládám, že do pracovníkovy doby strávené prací a "od - do" se nepočítá cestování
@@ -12,7 +13,7 @@ Předpokládám, že do pracovníkovy doby strávené prací a "od - do" se nepo
 script_start = time.time()
 result = []
 not_scheduled = []
-fname = "03"
+fname = "02"
 data = data_prep.prepare_data(f"{fname}.in")
 
 data_prep.show_data(data, "roads")
@@ -22,14 +23,38 @@ data_prep.show_data(data, "cleanings")
 print("-" * 50)
 
 possible_cleanings = {}
+unplanable = []
 for worker in data["workers"]:
     possible_cleanings[str(worker["worker"])] = []
+    print(unplanable)
+    unplanable = []
     for cleaning in data["cleanings"]:
         if len(possible_cleanings[str(worker["worker"])]) > 0:
             prev_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings[str(worker["worker"])][-1]))[0]]
             current_cleaning = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(cleaning["cleaning"]))[0]]
-            if prev_cleaning["end"] != current_cleaning["start"]:
+            if prev_cleaning["end"] < current_cleaning["start"]:
                 possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+            else:
+                # Cleaning Overlap
+                if not planner.can_do_it_someone_else(possible_cleanings, worker["worker"], cleaning["cleaning"]):
+                    # TODO: Kdyby byl náhodou úklid tak dlouhý, že by bylo potřeba smazat 2, je to velký fuckup a nevyřeším to
+                    if planner.can_do_it_someone_else(possible_cleanings, worker["worker"], prev_cleaning["cleaning"]):
+                        # Delete prev cleaning
+                        possible_cleanings[str(worker["worker"])].pop(-1)
+                        # Assign new cleaning
+                        possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+                    else:
+                        # There is hope somebody else will do it, else nobody will do it -- Cannot move prev cleaning
+                        # Mby count what is better for points
+                        unplanable.append(cleaning["cleaning"])
+                        pass
+                else:
+                    # Cannot move current cleaning, just pass and hope someone else will do it
+                    unplanable.append(cleaning["cleaning"])
+                    pass
+
+                # Může úklid udělat někdo jiný? přeskočit : =>
+                #   => Může předchozí úklid udělat někdo jiný? Vymazat a nahradit stávajícím : =>
         else:
             possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
 
@@ -97,7 +122,6 @@ for pc_key in possible_cleanings.keys():
 
         if netto_points < -penalties.CLEANING_NOT_DELIVERED and 0 < len(planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id)):
             print(f"Appending {cleaning_id} to not scheduled; netto points: {netto_points} < 0")
-            # TODO: Count cumulative delay
             other_options = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, cleaning_id)
             # other_options_prev = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, int(possible_cleanings[pc_key][idx_clid - 1]))
             other_options_prev = []  # Implement later
@@ -125,18 +149,6 @@ for pc_key in possible_cleanings.keys():
         possible_cleanings_unassigned = planner.remove_from_all_except(possible_cleanings_unassigned, pc_key, cleaning_id)
         print(possible_cleanings_unassigned)
 
-        # Odkud jede?
-        # Kam jede?
-        # To, kam jede, jak dlouho tam bude?
-        #   Když víc, než má pracovat, zahodit
-        # Stihne to?
-        #   Jaký má ETA?
-        #   Bude mít zpoždění?
-        #       Kolik bude to zpoždění stát? -- zatím se zpožděním vyhodit
-        # Může úklid udělat někdo jiný?
-        #   Pokud ne a nikdo nemůže udělat ani ten předchozí, nechat
-        #   Co jinak zatím nevím
-
 print("*-" * 20)
 print(result)
 print(set(sorted(not_scheduled)))
@@ -145,3 +157,5 @@ print(f"Script finished in {script_end - script_start} seconds")
 with open(f"output_files/{fname}.out", "w") as f:
     for row in result:
         f.write(" ".join(map(str, row)) + "\n")
+
+evaluate.evaluate(fname)
