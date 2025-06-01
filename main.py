@@ -61,6 +61,18 @@ for worker in data["workers"]:
                             # Replace shorter cleaning with longer
                             possible_cleanings[str(worker["worker"])].pop(-1)
                             possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+                        elif prev_cleaning["duration"] == current_cleaning["duration"]:
+                            # Find shortest path from idx -2 to
+                            # Assign with shorter path
+                            if len(possible_cleanings[str(worker["worker"])]) >= 3:
+                                prev_cleaning_c = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning",int(possible_cleanings[str(worker["worker"])][-2]))[0]]
+                                path_1 = planner.best_path(prev_cleaning_c["home"], prev_cleaning["home"], data)  # Předposlední --> současný (již naplánovaný)
+                                path_2 = planner.best_path(prev_cleaning_c["home"], current_cleaning["home"], data)  # Předposlední --> aktuálně plánovaný (ten, nepřiřazený)
+                                if path_2["time"] < path_1["time"]:
+                                    # Replace already planned cleaning with unplanned cleaning with shorter travel time
+                                    possible_cleanings[str(worker["worker"])].pop(-1)
+                                    possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+
                     # Cannot move current cleaning, just pass and hope someone else will do it
                     unplanable.append(cleaning["cleaning"])
                     pass
