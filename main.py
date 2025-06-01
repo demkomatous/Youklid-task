@@ -13,7 +13,7 @@ Předpokládám, že do pracovníkovy doby strávené prací a "od - do" se nepo
 script_start = time.time()
 result = []
 not_scheduled = []
-fname = "02"
+fname = "09"
 data = data_prep.prepare_data(f"{fname}.in")
 
 data_prep.show_data(data, "roads")
@@ -26,7 +26,7 @@ possible_cleanings = {}
 unplanable = []
 for worker in data["workers"]:
     possible_cleanings[str(worker["worker"])] = []
-    print(unplanable)
+    print(f"unplanable {unplanable}")
     unplanable = []
     for cleaning in data["cleanings"]:
         if len(possible_cleanings[str(worker["worker"])]) > 0:
@@ -41,14 +41,26 @@ for worker in data["workers"]:
                     if planner.can_do_it_someone_else(possible_cleanings, worker["worker"], prev_cleaning["cleaning"]):
                         # Delete prev cleaning
                         possible_cleanings[str(worker["worker"])].pop(-1)
-                        # Assign new cleaning
-                        possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+                        try:
+                            prev_cleaning_c = data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings[str(worker["worker"])][-1]))[0]]
+                            if prev_cleaning_c["end"] < current_cleaning["start"]:
+                                # Assign new cleaning
+                                possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+                        except Exception as e:
+                            # Assign new cleaning
+                            possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
                     else:
                         # There is hope somebody else will do it, else nobody will do it -- Cannot move prev cleaning
                         # Mby count what is better for points
                         unplanable.append(cleaning["cleaning"])
                         pass
                 else:
+                    # Is start equal? --> select better option
+                    if prev_cleaning["start"] == current_cleaning["start"]:
+                        if prev_cleaning["duration"] < current_cleaning["duration"]:
+                            # Replace shorter cleaning with longer
+                            possible_cleanings[str(worker["worker"])].pop(-1)
+                            possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
                     # Cannot move current cleaning, just pass and hope someone else will do it
                     unplanable.append(cleaning["cleaning"])
                     pass
@@ -57,6 +69,8 @@ for worker in data["workers"]:
                 #   => Může předchozí úklid udělat někdo jiný? Vymazat a nahradit stávajícím : =>
         else:
             possible_cleanings[str(worker["worker"])].append(cleaning["cleaning"])
+
+    print(f"Planned {possible_cleanings[str(worker['worker'])]}")
 
 print(possible_cleanings)
 possible_cleanings_unassigned = possible_cleanings.copy()
@@ -73,7 +87,6 @@ for pc_key in possible_cleanings.keys():
 
         overload_penalty = 0
         if in_work + cleaning["duration"] > target_worker['hours_per_day']:
-            print(f"Overload, in work {in_work}, target_duration: {target_worker['hours_per_day']} cleaning duration {cleaning['duration']}")
             # Going overload
             overload_penalty = cleaning["duration"] * penalties.OVERLOAD_PENALTY
 
@@ -103,25 +116,41 @@ for pc_key in possible_cleanings.keys():
             # Path does not exist
             continue
 
-        print("--- TIME PENALTY COUNT ---")
+        print(f"--- TIME PENALTY COUNT {cleaning['cleaning']} ---")
+
+        if journey_start == 0:
+            journey_start = cleaning["start"] - path["time"]
+
         journey_end = path["time"] + journey_start  # ETA
-        time_reserve = cleaning["start"] - data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings_unassigned[pc_key][idx_clid - 1]))[0]]["end"]
+        if idx_clid != 0:
+            time_reserve = cleaning["start"] - data["cleanings"][data_prep.get_record(data["cleanings"], "cleaning", int(possible_cleanings_unassigned[pc_key][idx_clid - 1]))[0]]["end"]
+        else:
+            time_reserve = 0
+
         total_points_earned = (math.floor(cleaning["duration"]) * penalties.HOUR_CLEANING + penalties.CLEANING_DONE)
+        print(delay, time_reserve)
         time_over = path["time"] + delay - time_reserve
         idle_penalty = 0
-        print("time over", time_over)
         if time_over < 0:
             # Worker is idle
             time_over = 0  # No late arrival
             idle_penalty = abs(time_over) * penalties.IDLE_PENALTY
 
         travel_penalty = path["time"] * penalties.TRAVEL_PENALTY
-        print(total_points_earned, (time_over * penalties.ARRIVE_LATE), travel_penalty, overload_penalty, out_of_ideal_penalty)
+        print(f"""
+            Total earned: {total_points_earned}
+            idle penalty: {idle_penalty}
+            travel penalty: {travel_penalty}
+            time over: {time_over * penalties.ARRIVE_LATE}
+            Overload penalty: {overload_penalty}
+            Out of ideal penalty: {out_of_ideal_penalty}
+        """)
+
         netto_points = total_points_earned - (time_over * penalties.ARRIVE_LATE) - travel_penalty - overload_penalty - out_of_ideal_penalty - idle_penalty
+        print(netto_points)
         print("-" * 20)
 
         if netto_points < -penalties.CLEANING_NOT_DELIVERED and 0 < len(planner.can_do_it_someone_else(possible_cleanings, pc_key, cleaning_id)):
-            print(f"Appending {cleaning_id} to not scheduled; netto points: {netto_points} < 0")
             other_options = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, cleaning_id)
             # other_options_prev = planner.can_do_it_someone_else(possible_cleanings_unassigned, pc_key, int(possible_cleanings[pc_key][idx_clid - 1]))
             other_options_prev = []  # Implement later
@@ -132,11 +161,9 @@ for pc_key in possible_cleanings.keys():
             if len(other_options) > 0:
                 # Skip, try another worker ... if another worker is not available, unscheduled cleaning
                 not_scheduled.append(cleaning_id)
-                print(f"Appending {cleaning_id} to not scheduled")
                 continue
             else:
                 not_scheduled.append(cleaning_id)
-                print(f"Appending {cleaning_id} to not scheduled")
                 continue
 
         in_work += cleaning["duration"]
